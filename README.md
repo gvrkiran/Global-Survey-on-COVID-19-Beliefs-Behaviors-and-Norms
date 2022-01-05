@@ -2,8 +2,8 @@
 
 These scripts take the raw data (shared with users who signed the agreement with MIT and Facebook on Dropbox) and produce intermediate files that are used in the python notebook for the visualization
 
-# some of the scripts make use of the API we developed for processing the data
-# https://covidsurvey.mit.edu/api.html
+Some of the scripts make use of the API we developed for processing the data
+https://covidsurvey.mit.edu/api.html
 
 The following scripts are responsible for generating the respective data files:
 scripts/getProcessedData.py
