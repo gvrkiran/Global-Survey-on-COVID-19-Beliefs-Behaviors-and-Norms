@@ -6,26 +6,28 @@ Some of the scripts make use of the API we developed for processing the data
 https://covidsurvey.mit.edu/api.html
 
 The following scripts are responsible for generating the respective data files:
-scripts/getProcessedData.py
-	- data/processed_data.txt.gz
 
-scripts/getVaccineData.py
-	- data/vaccine_accept_timeseries_weighted_bootstrap_mean.txt
-	- data/vaccine_accept_timeseries_weighted_bootstrap_sem.txt
-	- data/vaccine_norms_timeseries_bootstrap_mean.txt
-	- data/vaccine_norms_timeseries_bootstrap_sem.txt
-	- data/vaccine_accept_stacked_area.csv
-	- data/demographic_data.csv
-	- data/mismatch_index_raw_data.txt
+1. scripts/getProcessedData.py
+	> data/processed_data.txt.gz
 
-scripts/getDataFromAPI.py
-	- data/vaccine_accept_vaccine_norms_waves_and_snapshot.txt 
-	- data/news_sources_mediums_consume_trust.txt
-	- data/sample_size_timeseries.txt
-	- data/effective_sample_size_timeseries.txt
+2. scripts/getVaccineData.py
+	> data/vaccine_accept_timeseries_weighted_bootstrap_mean.txt
+	> data/vaccine_accept_timeseries_weighted_bootstrap_sem.txt
+	> data/vaccine_norms_timeseries_bootstrap_mean.txt
+	> data/vaccine_norms_timeseries_bootstrap_sem.txt
+	> data/vaccine_accept_stacked_area.csv
+	> data/demographic_data.csv
+	> data/mismatch_index_raw_data.txt
 
-survey_conversion_timeseries.txt - obtained from Facebook
-india_state_codes.csv,us_state_population_fips.csv,waves_snapshot_countries.txt - general survey related files
+3. scripts/getDataFromAPI.py
+	> data/vaccine_accept_vaccine_norms_waves_and_snapshot.txt 
+	> data/news_sources_mediums_consume_trust.txt
+	> data/sample_size_timeseries.txt
+	> data/effective_sample_size_timeseries.txt
+
+4. survey_conversion_timeseries.txt - obtained from Facebook
+
+5. india_state_codes.csv,us_state_population_fips.csv,waves_snapshot_countries.txt - general survey related files
 
 # Generating the figures
 
