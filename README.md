@@ -1,4 +1,4 @@
-## scripts
+## Scripts and data for replicating the figures for the paper "Global survey on COVID-19 beliefs, behaviors, and norms"
 
 These scripts take the raw data (shared with users who signed the agreement with MIT and Facebook on Dropbox) and produce intermediate files that are used in the python notebook for the visualization
 
