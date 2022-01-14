@@ -31,6 +31,9 @@ The following scripts are responsible for generating the respective data files:
 
 6. code/misc_plots.py -- used to generate miscellaneous plots such as the weighted/unweighted gender ratio (in Appendix A), and the table containing the langauge information
 	> makes use of the code code/make_numeric_dataset.py first to produce the file covid_survey_responses_numeric.txt.gz
+
+7. code/weight_summaries.Rmd -- used to generate Figures 1, 3 and 4 in Appendix A.
+
 # Generating the figures
 
 With the data in place in the data/ folder, all the figures are produced by running the jupyter notebook

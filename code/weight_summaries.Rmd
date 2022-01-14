@@ -1,0 +1,267 @@
+---
+title: "Analysis of weights for the COVID Beliefs, Behaviors & Norms Survey"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(readr)
+library(ggplot2)
+theme_set(theme_bw())
+library(dplyr)
+library(tidyr)
+library(srvyr)
+library(countrycode)
+library(stringr)
+```
+
+## Load data
+```{r}
+# relies on setting environment variable COVID_SURVEY_DATA_DIR
+both_surveys = read_tsv(
+  paste0(Sys.getenv("COVID_SURVEY_DATA_DIR"), "covid_survey_responses.txt.gz"),
+  col_types = cols(
+    us_state = col_character(),
+    india_state = col_character(),
+    geoip_state = col_character(),
+    wave = col_double(),#col_integer(),
+    weight_demo = col_double(),
+    weight_full_survey = col_double(),
+    trim_indicator_demo = col_integer(),
+    trim_indicator_full_survey = col_integer(),
+    weight_internet_demo = col_double(),
+    weight_internet_full_survey = col_double(),
+    trim_indicator_internet_demo = col_integer(),
+    trim_indicator_internet_full_survey = col_integer(),
+    prevention_mask = col_character()
+    )
+  )
+```
+
+```{r}
+both_surveys = both_surveys %>% 
+  mutate(
+    country_code = countrycode::countrycode(country, origin = "country.name", destination = "iso2c")
+  )
+waves = both_surveys %>% filter(survey_type == "waves", wave == 1)
+```
+
+
+# Trimming analysis
+Are there multiple distinct values for weights that have been trimmed?
+```{r}
+both_surveys %>%
+  filter(!is.na(weight_full_survey)) %>%
+  group_by(country) %>%
+  mutate(
+    mean_weight_full_survey = mean(weight_full_survey)
+  ) %>%
+  filter(trim_indicator_full_survey == 1 & weight_full_survey > mean_weight_full_survey) %>%
+  summarise(
+    n_trimmed_weights_demo = n(),
+    distinct_trimmed_weights_demo = n_distinct(weight_full_survey)
+  ) %>%
+  filter(distinct_trimmed_weights_demo > 1) %>%
+  arrange(-distinct_trimmed_weights_demo)
+```
+
+Combine missingness categories, thus assuming any remaining missingness is MCAR. And create modified variables.
+```{r}
+waves_long = waves %>%
+  filter(wave == 1, !is.na(country)) %>%
+  mutate(across(everything(), na_if, -1)) %>%
+  mutate(across(everything(), na_if, -2)) %>%
+  mutate(
+    female = gender == "Female",
+    `age [18, 30]` = age %in% c("Under 20", "20-30"),
+    `age > 50` = age %in% c("51-60", "61-70", "71-80", "Over 80"),
+    know_positive_case = know_positive_case == "Yes",
+    vaccine_accept = vaccine_accept == "Yes"
+  ) %>%
+  select(
+    country, country_code,
+    weight_demo, weight_full_survey, weight_internet_demo, weight_internet_full_survey,
+    female, `age [18, 30]`, `age > 50`, know_positive_case, vaccine_accept) %>%
+  pivot_longer(female:vaccine_accept)
+  
+```
+
+
+
+# Using weights
+
+## Using demographic completion weights
+```{r}
+w_v_uw_long = waves_long %>%
+  filter(!is.na(weight_demo)) %>%
+  as_survey_design(weights = weight_demo) %>%
+  group_by(country, country_code, name) %>%
+  summarise(
+    n = unweighted(n()),
+    unweighted = unweighted(mean(value, na.rm = TRUE)),
+    weighted = survey_mean(value, na.rm = TRUE, vartype = "ci", deff = TRUE)
+  ) %>%
+  group_by(country) %>%
+  mutate(
+    female_unweighted = unweighted[name == "female"]
+  )
+```
+
+
+## Demographic callibration with demographic completion weights
+```{r}
+w_v_uw_long %>% 
+  filter(name %in% c("female", "age [18, 30]", "age > 50")) %>%
+ggplot(
+  aes(x = reorder(substr(country, 1, 27), female_unweighted),
+      y = weighted, ymax = weighted_upp, ymin = weighted_low)
+) +
+  facet_wrap(~ name, scales = "free_x") +
+  coord_flip() +
+  geom_point(aes(y = unweighted), color = "brown", pch = 15) +
+  geom_point() +
+  geom_errorbar(width = .2) +
+  scale_y_continuous(breaks = c(0, .25, .5)) +
+  ylab("Weighted mean and 95% CI (black) and unweighted mean (brown)") +
+  xlab("Country (sorted by unweighted % female)") +
+  theme(panel.grid.minor = element_blank())
+ggsave("../figs/calibration_demographics_by_country_demo_weights.pdf", width = 7, height = 4.5)
+ggsave("../figs/calibration_demographics_by_country_demo_weights.png", width = 7, height = 4.5, dpi = 400)
+```
+
+## Design effects
+```{r}
+w_v_uw_long %>% 
+  filter(name %in% c("know_positive_case", "vaccine_accept")) %>%
+  mutate(
+    name = gsub("accept", "acceptance", gsub("_", " ", name))
+  ) %>%
+ggplot(
+  aes(x = reorder(substr(country, 1, 27), weighted_deff, max),
+      y = weighted_deff, color = name, shape = name, group = name)
+) +
+  #facet_wrap(~ name, scales = "free_x") +
+  coord_flip() +
+  geom_point(size = 2) +
+  scale_color_brewer(palette = "Dark2") +
+  scale_y_sqrt(breaks = seq(1, 5, by = .5), lim = c(1, 5)) +
+  ylab("Design effect") +
+  xlab("Country (sorted by max design effect)") +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = c(.7, .15),
+        legend.title = element_blank())
+ggsave("../figs/design_effect_by_country_demo_weights.pdf", width = 6, height = 4.5)
+ggsave("../figs/design_effect_by_country_demo_weights.png", width = 6, height = 4.5, dpi = 400)
+```
+
+### Comparing design effects with Internet population weights
+
+Compute same quantities using the Internet-using adult population weights:
+```{r}
+w_v_uw_long_internet = waves_long %>%
+  filter(!is.na(weight_internet_demo)) %>%
+  as_survey_design(weights = weight_internet_demo) %>%
+  group_by(country, country_code, name) %>%
+  summarise(
+    n = unweighted(n()),
+    unweighted = unweighted(mean(value, na.rm = TRUE)),
+    weighted = survey_mean(value, na.rm = TRUE, vartype = "ci", deff = TRUE)
+  ) %>%
+  group_by(country) %>%
+  mutate(
+    female_unweighted = unweighted[name == "female"]
+  )
+```
+
+```{r}
+adults_v_internet_long = bind_rows(
+  w_v_uw_long %>% mutate(target_population = "adults"),
+  w_v_uw_long_internet  %>% mutate(target_population = "Internet using adults")
+) %>%
+  group_by(country, name) %>%
+  mutate(
+    has_internet_weights = sum(n[target_population == "Internet using adults"]) > 100
+  ) %>%
+  filter(has_internet_weights, !is.na(country_code))
+```
+
+```{r}
+adults_v_internet_long %>% 
+  filter(name %in% c("know_positive_case")) %>%
+ggplot(
+  aes(x = reorder(substr(country, 1, 27), weighted_deff, max),
+      y = weighted_deff, color = name, shape = target_population, group = target_population)
+) +
+  #facet_wrap(~ name, scales = "free_x") +
+  coord_flip() +
+  geom_line() +
+  geom_point(fill = "white") +
+  scale_color_brewer(palette = "Dark2") +
+  scale_shape_manual(values = c(19, 21)) +
+  scale_y_sqrt(breaks = seq(1, 5, by = .5), lim = c(1, 5)) +
+  ylab("Design effect") +
+  xlab("Country (sorted by design effect)") +
+  guides(color = FALSE) +
+  theme(#panel.grid.minor = element_blank(),
+        legend.position = c(.7, .15),
+        legend.title = element_blank())
+ggsave("../figs/design_effect_by_country_demo_v_internet_weights.pdf", width = 4, height = 3)
+ggsave("../figs/design_effect_by_country_demo_v_internet_weights.png", width = 4, height = 3, dpi = 400)
+```
+
+
+## Comparing results using demo and full survey weights
+The two sets of weights allow for an internal falsification test, as they should produce results are consistent with each other.
+
+Compute the same quantities as above with the full survey completion weights.
+```{r}
+w_v_uw_long_full = waves_long %>%
+  filter(!is.na(weight_full_survey)) %>%
+  as_survey_design(weights = weight_full_survey) %>%
+  group_by(country, country_code, name) %>%
+  summarise(
+    n = unweighted(n()),
+    unweighted = unweighted(mean(value, na.rm = TRUE)),
+    weighted = survey_mean(value, na.rm = TRUE, vartype = "ci")
+  ) %>%
+  group_by(country) %>%
+  mutate(
+    female_unweighted = unweighted[name == "female"]
+  )
+```
+
+```{r}
+demo_v_full_long = bind_rows(
+  w_v_uw_long %>% mutate(completion_type = "demo"),
+  w_v_uw_long_full  %>% mutate(completion_type = "full")
+) %>%
+  group_by(country, name) %>%
+  mutate(
+    n_full = n
+  ) %>%
+  filter(!is.na(country_code))
+```
+
+
+```{r}
+demo_v_full_long %>% 
+  filter(name %in% c("female", "know_positive_case", "vaccine_accept")) %>%
+ggplot(
+  aes(x = reorder(substr(country, 1, 27), female_unweighted),
+      y = weighted, ymax = weighted_upp, ymin = weighted_low,
+      color = completion_type, shape = completion_type
+      )
+) +
+  facet_wrap(~ name, scales = "free_x", nrow = 1) +
+  coord_flip() +
+  geom_pointrange(size = .3, position = position_dodge(width = .5)) +
+  ylab("Weighted mean and 95% CI") +
+  xlab("Country (sorted by unweighted % female)") +
+  scale_color_manual(values = c("black", "blue")) +
+  #scale_y_continuous(breaks = 1:5/10) +
+  theme(panel.grid.minor = element_blank(),
+        legend.position = "bottom")
+ggsave("../figs/calibration_demographics_by_country_demo_v_full_weights.pdf", width = 7, height = 5.5)
+ggsave("../figs/calibration_demographics_by_country_demo_v_full_weights.png", width = 7, height = 5.5, dpi = 400)
+```
